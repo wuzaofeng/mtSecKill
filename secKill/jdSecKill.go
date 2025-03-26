@@ -45,6 +45,9 @@ type jdSecKill struct {
 	DiffTime    int64
 }
 
+var OpenURL = "https://h5static.m.jd.com/mall/active/4HfnzzR9fEiGxYamWbf65PnPj9WD/index.html?utm_user=plusmember&_ts=1742819243430&ad_od=share&gxd=RnAowmYKPGXfnp4Sq4B_W578vOMp4E7JgUugKDcomXTOIlSPI-BCnvuytD0G7kc&gx=RnAomTM2PUO_ss8T04FzPCuSv0HqkkASPQ&PTAG=17053.1.1&cu=true&utm_source=weixin&utm_medium=weixin&utm_campaign=t_1000072672_17053_001&utm_term=bc18474378e54dc89d83c40414e3d491&preventPV=1&forceCurrentView=1"
+var Dom = "#J_babelOptPage > div > div.bab_opt_mod.bab_opt_mod_1_7.module_115476372.free_coupon > div > div:nth-child(1) > a:nth-child(2) > div"
+
 func NewJdSecKill(execPath string, skuId string, num, works int) *jdSecKill {
 	if works < 0 {
 		works = 1
@@ -220,6 +223,7 @@ func (jsk *jdSecKill) Run() error {
 			}
 			return nil
 		}),
+		jsk.NavigatePage(),
 		jsk.WaitStart(),
 		jsk.PollListen(),
 		// chromedp.ActionFunc(func(ctx context.Context) error {
@@ -263,6 +267,22 @@ func (jsk *jdSecKill) Run() error {
 	})
 }
 
+func (jsk *jdSecKill) NavigatePage() chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		logs.PrintlnInfo("加载页面....")
+		// chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
+		chromedp.Navigate(OpenURL).Do(ctx)
+
+		// if err != nil {
+		// 	return fmt.Errorf("页面导航失败: %w", err)
+		// }
+		// logs.PrintlnInfo("等待页面完成....")
+
+		return nil
+
+	}
+}
+
 func (jsk *jdSecKill) WaitStart() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 		// u := "https://item.jd.com/" + jsk.SkuId + ".html"
@@ -299,15 +319,15 @@ func (jsk *jdSecKill) WaitStart() chromedp.ActionFunc {
 		// 	}
 
 		aa := global.UnixMilli()
-		if aa-st >= 0 {
+		if aa-st >= -100 {
 			logs.PrintlnInfo("时间到达。。。。开始执行")
 			return nil
 		} else {
 
 			logs.PrintlnInfo((aa - st))
 
-			if aa-st > -2000 {
-				time.Sleep(1 * time.Microsecond)
+			if aa-st > -1000 {
+				time.Sleep(100 * time.Microsecond)
 				goto RE
 			} else {
 				// 间隔 1 秒刷新
@@ -356,86 +376,109 @@ func (jsk *jdSecKill) GetEidAndFp() chromedp.ActionFunc {
 		return nil
 	}
 }
-
 func (jsk *jdSecKill) PollListen() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
+
 		for { // 主循环持续监控
 			// 同时监听两种按钮状态
-			var (
-				noClickVisible  bool
-				canClickVisible bool
-			)
+			// var (
+			// 	noClickVisible  bool
+			// 	canClickVisible bool
+			// )
 
-			logs.PrintlnInfo("加载页面....")
-			err := chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
+			for {
+				logs.PrintlnInfo("发现可点按钮")
 
-			if err != nil {
-				return fmt.Errorf("页面导航失败: %w", err)
+				err := chromedp.WaitVisible(Dom).Do(ctx)
+				if err != nil {
+					return fmt.Errorf("等待按钮显示失败: %w", err)
+				}
+				_ = chromedp.Click(Dom).Do(ctx)
+				time.Sleep(1 * time.Nanosecond)
+				logs.PrintlnInfo("点击完成")
 			}
-			logs.PrintlnInfo("等待页面完成....")
+
+			// logs.PrintlnInfo("加载页面....")
+			// // err := chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
+			// err := chromedp.Navigate("https://pro.m.jd.com/mall/active/mMYmY13a2s55b1uPYayGMS6smB9/index.html?rid=15644&hideyl=1&cu=true&utm_source=lianmeng__2__kong&utm_medium=jingfen&utm_campaign=t_2020918764_3802091_10731340_2_66_1&utm_term=f960f2871668495a8bc74ac6a9ffa2a2").Do(ctx)
+
+			// if err != nil {
+			// 	return fmt.Errorf("页面导航失败: %w", err)
+			// }
+			// logs.PrintlnInfo("等待页面完成....")
 
 			// 使用 Poll 轮询检测按钮状态
-			err = chromedp.Run(ctx,
-				chromedp.Tasks{
-					// 并行检测两种按钮
-					chromedp.EvaluateAsDevTools(`
-                            document.querySelector('.free_coupon_module.coupon_1x .button_no_click') !== null 
-                            && document.querySelector('.free_coupon_module.coupon_1x .button_no_click').offsetParent !== null
-                        `, &noClickVisible),
-					chromedp.EvaluateAsDevTools(`
-                            document.querySelector('.free_coupon_module.coupon_1x .button_can_click') !== null 
-                            && document.querySelector('.free_coupon_module.coupon_1x .button_can_click').offsetParent !== null
-                        `, &canClickVisible),
-				},
-			)
+			// err := chromedp.Run(ctx,
+			// 	chromedp.Tasks{
+			// 		// 并行检测两种按钮
+			// 		chromedp.EvaluateAsDevTools(`
+			//                 document.querySelector('.free_coupon_module.coupon_1x .button_no_click') !== null
+			//                 && document.querySelector('.free_coupon_module.coupon_1x .button_no_click').offsetParent !== null
+			//             `, &noClickVisible),
+			// 		chromedp.EvaluateAsDevTools(`
+			//                 document.querySelector('.free_coupon_module.coupon_1x .button_can_click') !== null
+			//                 && document.querySelector('.free_coupon_module.coupon_1x .button_can_click').offsetParent !== null
+			//             `, &canClickVisible),
+			// 	},
+			// )
 
-			if err != nil {
-				return fmt.Errorf("轮询检测失败: %w", err)
-			}
+			// if err != nil {
+			// 	return fmt.Errorf("轮询检测失败: %w", err)
+			// }
 
-			fmt.Print("noClickVisible", noClickVisible)
+			// fmt.Print("noClickVisible", noClickVisible)
 
-			fmt.Print("canClickVisible", canClickVisible)
+			// fmt.Print("canClickVisible", canClickVisible)
 
-			// 状态处理逻辑
-			switch {
-			case noClickVisible:
-				// 触发页面刷新
-				logs.PrintlnInfo("检测到未激活按钮，刷新页面....")
+			// // 状态处理逻辑
+			// switch {
+			// case noClickVisible:
+			// 	// 触发页面刷新
+			// 	logs.PrintlnInfo("检测到未激活按钮，刷新页面....")
 
-				break
-				// if err := chromedp.Reload().Do(ctx); err != nil {
-				// 	currentRetry++
-				// 	if currentRetry >= maxRetries {
-				// 		return fmt.Errorf("页面刷新失败（已达最大重试次数）: %w", err)
-				// 	}
+			// 	_ = chromedp.Click(".free_coupon_module.coupon_1x .button_no_click").Do(ctx)
+			// 	time.Sleep(1 * time.Nanosecond)
+			// 	logs.PrintlnInfo(".free_coupon_module.coupon_1x .button_no_click点击完成")
 
-				// 	logs.PrintlnInfo("刷新失败，等待重试....")
-				// 	time.Sleep(2 * time.Second)
-				// } else {
-				// 	currentRetry = 0            // 重置计数器
-				// 	time.Sleep(1 * time.Second) // 等待页面加载
-				// }
+			// 	// if err := chromedp.Reload().Do(ctx); err != nil {
+			// 	// 	currentRetry++
+			// 	// 	if currentRetry >= maxRetries {
+			// 	// 		return fmt.Errorf("页面刷新失败（已达最大重试次数）: %w", err)
+			// 	// 	}
 
-			case canClickVisible:
-				logs.PrintlnInfo("发现可点击按钮，开始高频触发...")
-				// 高频点击（带频率限制）
+			// 	// 	logs.PrintlnInfo("刷新失败，等待重试....")
+			// 	// 	time.Sleep(2 * time.Second)
+			// 	// } else {
+			// 	// 	currentRetry = 0            // 重置计数器
+			// 	// 	time.Sleep(1 * time.Second) // 等待页面加载
+			// 	// }
 
-				// var count := 1
-				for {
-					logs.PrintlnInfo("发现可点按钮")
+			// 	for {
+			// 		_ = chromedp.Click(".free_coupon_module.coupon_1x .button_no_click").Do(ctx)
+			// 		time.Sleep(1 * time.Nanosecond)
+			// 		logs.PrintlnInfo(".free_coupon_module.coupon_1x .button_no_click点击完成")
+			// 		logs.PrintlnInfo("点击完成")
+			// 	}
 
-					_ = chromedp.Click(".free_coupon_module.coupon_1x .button_can_click").Do(ctx)
-					time.Sleep(1 * time.Nanosecond)
-					logs.PrintlnInfo("点击完成")
-				}
+			// case canClickVisible:
+			// 	logs.PrintlnInfo("发现可点击按钮，开始高频触发...")
+			// 	// 高频点击（带频率限制）
 
-			default:
-				logs.PrintlnInfo("未检测到目标按钮，等待状态变化...")
-				time.Sleep(1 * time.Second)
-			}
+			// 	// var count := 1
+			// 	for {
+			// 		logs.PrintlnInfo("发现可点按钮")
+
+			// 		_ = chromedp.Click(".free_coupon_module.coupon_1x").Do(ctx)
+			// 		time.Sleep(1 * time.Nanosecond)
+			// 		logs.PrintlnInfo("点击完成")
+			// 	}
+
+			// default:
+			// 	logs.PrintlnInfo("未检测到目标按钮，等待状态变化...")
+			// 	time.Sleep(1 * time.Second)
+			// }
 		}
-		return nil
+		// return nil
 	}
 }
 
