@@ -7,14 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/axgle/mahonia"
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/tidwall/gjson"
 	"github.com/zqijzqj/mtSecKill/chromedpEngine"
@@ -43,12 +41,12 @@ type jdSecKill struct {
 	IsOk        bool
 	StartTime   time.Time
 	DiffTime    int64
+	clickCount  int64 // 新增点击计数器
+	openURL     string
+	dom         string
 }
 
-var OpenURL = "https://h5static.m.jd.com/mall/active/4HfnzzR9fEiGxYamWbf65PnPj9WD/index.html?utm_user=plusmember&_ts=1742819243430&ad_od=share&gxd=RnAowmYKPGXfnp4Sq4B_W578vOMp4E7JgUugKDcomXTOIlSPI-BCnvuytD0G7kc&gx=RnAomTM2PUO_ss8T04FzPCuSv0HqkkASPQ&PTAG=17053.1.1&cu=true&utm_source=weixin&utm_medium=weixin&utm_campaign=t_1000072672_17053_001&utm_term=bc18474378e54dc89d83c40414e3d491&preventPV=1&forceCurrentView=1"
-var Dom = "#J_babelOptPage > div > div.bab_opt_mod.bab_opt_mod_1_7.module_115476372.free_coupon > div > div:nth-child(1) > a:nth-child(2) > div"
-
-func NewJdSecKill(execPath string, skuId string, num, works int) *jdSecKill {
+func NewJdSecKill(execPath string, skuId string, num, works int, openURL string, dom string) *jdSecKill {
 	if works < 0 {
 		works = 1
 	}
@@ -62,8 +60,11 @@ func NewJdSecKill(execPath string, skuId string, num, works int) *jdSecKill {
 		Works:      works,
 		IsOk:       false,
 		IsOkChan:   make(chan struct{}, 1),
+		openURL:    "",
+		dom:        "",
 	}
 	jsk.ctx, jsk.cancel = chromedpEngine.NewExecCtx(chromedp.ExecPath(execPath), chromedp.UserAgent(jsk.userAgent))
+	jsk.openURL, jsk.dom = openURL, dom
 	return jsk
 }
 
@@ -82,6 +83,7 @@ func (jsk *jdSecKill) Stop() {
 func (jsk *jdSecKill) GetReq(reqUrl string, params map[string]string, referer string, ctx context.Context) (gjson.Result, error) {
 	if referer == "" {
 		referer = "https://www.jd.com"
+
 	}
 	if ctx == nil {
 		ctx = jsk.bCtx
@@ -226,57 +228,19 @@ func (jsk *jdSecKill) Run() error {
 		jsk.NavigatePage(),
 		jsk.WaitStart(),
 		jsk.PollListen(),
-		// chromedp.ActionFunc(func(ctx context.Context) error {
-		// 	jsk.GetEidAndFp()
-		// 	//提取抢购连接
-		// 	// for _, v := range jsk.bWorksCtx {
-		// 	// 	go func(ctx2 context.Context) {
-		// 	// 		// jsk.FetchSecKillUrl()
-		// 	// 		logs.PrintlnInfo("跳转链接......")
-
-		// 	// 		// _ = chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
-		// 	// 		// logs.PrintlnInfo("等待页面更新完成....")
-		// 	// 		// _ = chromedp.WaitVisible(".coupon_wrapper").Do(ctx)
-		// 	// 		// var itemNodes []*cdp.Node
-		// 	// 		// err := chromedp.Nodes(".coupon_wrapper", &itemNodes, chromedp.ByQueryAll).Do(ctx)
-		// 	// 		err := chromedp.Click(".pane-switch__item-btn").Do(ctx)
-
-		// 	// 		logs.PrintlnInfo("点击完成")
-
-		// 	// 		// chromedp.Click(".coupon_wrapper").Do(ctx)
-		// 	// 		// 	_, _, _, _ = page.Navigate(jsk.SecKillUrl).WithReferrer("https://item.jd.com/" + jsk.SkuId + ".html").Do(ctx2)
-		// 	// 	SecKillRE:
-
-		// 	// 		//请求抢购连接，提交订单
-		// 	// 		// err := jsk.ReqSubmitSecKillOrder(ctx2)
-		// 	// 		if err != nil {
-		// 	// 			logs.PrintlnInfo(err, "等待重试")
-		// 	// 			goto SecKillRE
-		// 	// 		}
-		// 	// 	}(v)
-		// 	// }
-		// 	// select {
-		// 	// case <-jsk.IsOkChan:
-		// 	// 	logs.PrintlnInfo("抢购成功。。。10s后关闭进程...")
-		// 	// 	_ = chromedp.Sleep(10 * time.Second).Do(ctx)
-		// 	// case <-jsk.ctx.Done():
-		// 	// case <-jsk.bCtx.Done():
-		// 	// }
-		// 	return nil
-		// }),
 	})
 }
 
 func (jsk *jdSecKill) NavigatePage() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 		logs.PrintlnInfo("加载页面....")
-		// chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
-		chromedp.Navigate(OpenURL).Do(ctx)
-
-		// if err != nil {
-		// 	return fmt.Errorf("页面导航失败: %w", err)
-		// }
-		// logs.PrintlnInfo("等待页面完成....")
+		chromedp.Navigate(jsk.openURL).Do(ctx)
+		time.Sleep(1 * time.Second)
+		var s bool
+		chromedp.Evaluate(`
+             (function() {
+     			window.scrollTo({top: 3000, behavior: 'smooth'})
+            `, &s).Do(ctx)
 
 		return nil
 
@@ -285,38 +249,10 @@ func (jsk *jdSecKill) NavigatePage() chromedp.ActionFunc {
 
 func (jsk *jdSecKill) WaitStart() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
-		// u := "https://item.jd.com/" + jsk.SkuId + ".html"
-		// for i := 0; i < jsk.Works; i++ {
-		// 	go func() {
-		// 		tid, err := target.CreateTarget(u).Do(ctx)
-		// 		if err == nil {
-		// 			c, _ := chromedp.NewContext(jsk.bCtx, chromedp.WithTargetID(tid))
-		// 			_ = chromedp.Run(c, chromedp.Tasks{
-		// 				chromedp.ActionFunc(func(ctx context.Context) error {
-		// 					logs.PrintlnInfo("打开新的抢购标签.....")
-		// 					jsk.mu.Lock()
-		// 					jsk.bWorksCtx = append(jsk.bWorksCtx, ctx)
-		// 					jsk.mu.Unlock()
-		// 					return nil
-		// 				}),
-		// 			})
-		// 		}
-		// 	}()
-		// }
-		// _ = chromedp.Navigate(u).Do(ctx)
+
 	RE:
 		st := jsk.StartTime.UnixNano() / 1e6
 		logs.PrintlnInfo("等待时间到达" + jsk.StartTime.Format(global.DateTimeFormatStr) + "...... 请勿关闭浏览器")
-		// for {
-		// 	select {
-		// 	case <-jsk.ctx.Done():
-		// 		logs.PrintErr("浏览器被关闭，退出进程")
-		// 		return nil
-		// 	case <-jsk.bCtx.Done():
-		// 		logs.PrintErr("浏览器被关闭，退出进程")
-		// 		return nil
-		// 	default:
-		// 	}
 
 		aa := global.UnixMilli()
 		if aa-st >= -100 {
@@ -335,318 +271,71 @@ func (jsk *jdSecKill) WaitStart() chromedp.ActionFunc {
 			}
 			goto RE
 		}
-		// }
-		// return nil
 	}
 }
 
-func (jsk *jdSecKill) GetEidAndFp() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-
-		// RE:
-		for { // 使用无限循环替代 goto
-			logs.PrintlnInfo("加载页面....")
-			err := chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
-
-			if err != nil {
-				return fmt.Errorf("页面导航失败: %w", err)
-			}
-			logs.PrintlnInfo("等待页面完成....")
-
-			logs.PrintlnInfo("监听按钮显示....")
-
-			err = chromedp.WaitVisible(".button_no_click").Do(ctx)
-			if err != nil {
-				return fmt.Errorf("等待按钮显示失败: %w", err)
-			}
-			// _ = chromedp.ActionFunc(func(ctx context.Context) error {}).Do(ctx)
-			// // var itemNodes []*cdp.Node
-			// // err := chromedp.Nodes(".coupon_wrapper", &itemNodes, chromedp.ByQueryAll).Do(ctx)
-
-			logs.PrintlnInfo("发现可点按钮")
-			_ = chromedp.WaitVisible(".button_can_click").Do(ctx)
-			_ = chromedp.Click(".coupon_wrapper").Do(ctx)
-
-			logs.PrintlnInfo("点击完成")
-
-			time.Sleep(1 * time.Microsecond)
-			// goto RE
-
-		}
-		return nil
-	}
-}
 func (jsk *jdSecKill) PollListen() chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 
-		for { // 主循环持续监控
-			// 同时监听两种按钮状态
-			// var (
-			// 	noClickVisible  bool
-			// 	canClickVisible bool
-			// )
+		for {
+			logs.PrintlnInfo("发现可点按钮")
 
-			for {
-				logs.PrintlnInfo("发现可点按钮")
-
-				err := chromedp.WaitVisible(Dom).Do(ctx)
-				if err != nil {
-					return fmt.Errorf("等待按钮显示失败: %w", err)
-				}
-				_ = chromedp.Click(Dom).Do(ctx)
-				time.Sleep(1 * time.Nanosecond)
-				logs.PrintlnInfo("点击完成")
+			err := chromedp.WaitVisible(jsk.dom, chromedp.ByQuery).Do(ctx)
+			if err != nil {
+				return fmt.Errorf("等待按钮显示失败: %w", err)
 			}
+			_ = chromedp.Click(jsk.dom, chromedp.ByQuery).Do(ctx)
+			time.Sleep(1 * time.Nanosecond)
 
-			// logs.PrintlnInfo("加载页面....")
-			// // err := chromedp.Navigate("https://pro.m.jd.com/mall/active/3HVGeaYAqEaSPUpCRDt3BBgGhioB/index.html?_ts=1742375471386&utm_user=plusmember&gx=RnAomTM2FlSdt9tM280OJ6eeDGMvFA&gxd=RnAoxGdaYTfZw8xG-tZwWbrg6hMG75g&ad_od=share&baseType=3&uabt=613_7363_1_0&hideyl=1&cu=true&utm_source=lianmeng__2__weibo.com&utm_medium=jingfen&utm_campaign=t_1001701389_2011078412_4100072861_3003030792&utm_term=7b8e3ede95b7475d8ee81c404384870b").Do(ctx)
-			// err := chromedp.Navigate("https://pro.m.jd.com/mall/active/mMYmY13a2s55b1uPYayGMS6smB9/index.html?rid=15644&hideyl=1&cu=true&utm_source=lianmeng__2__kong&utm_medium=jingfen&utm_campaign=t_2020918764_3802091_10731340_2_66_1&utm_term=f960f2871668495a8bc74ac6a9ffa2a2").Do(ctx)
-
-			// if err != nil {
-			// 	return fmt.Errorf("页面导航失败: %w", err)
-			// }
-			// logs.PrintlnInfo("等待页面完成....")
-
-			// 使用 Poll 轮询检测按钮状态
-			// err := chromedp.Run(ctx,
-			// 	chromedp.Tasks{
-			// 		// 并行检测两种按钮
-			// 		chromedp.EvaluateAsDevTools(`
-			//                 document.querySelector('.free_coupon_module.coupon_1x .button_no_click') !== null
-			//                 && document.querySelector('.free_coupon_module.coupon_1x .button_no_click').offsetParent !== null
-			//             `, &noClickVisible),
-			// 		chromedp.EvaluateAsDevTools(`
-			//                 document.querySelector('.free_coupon_module.coupon_1x .button_can_click') !== null
-			//                 && document.querySelector('.free_coupon_module.coupon_1x .button_can_click').offsetParent !== null
-			//             `, &canClickVisible),
-			// 	},
-			// )
-
-			// if err != nil {
-			// 	return fmt.Errorf("轮询检测失败: %w", err)
-			// }
-
-			// fmt.Print("noClickVisible", noClickVisible)
-
-			// fmt.Print("canClickVisible", canClickVisible)
-
-			// // 状态处理逻辑
-			// switch {
-			// case noClickVisible:
-			// 	// 触发页面刷新
-			// 	logs.PrintlnInfo("检测到未激活按钮，刷新页面....")
-
-			// 	_ = chromedp.Click(".free_coupon_module.coupon_1x .button_no_click").Do(ctx)
-			// 	time.Sleep(1 * time.Nanosecond)
-			// 	logs.PrintlnInfo(".free_coupon_module.coupon_1x .button_no_click点击完成")
-
-			// 	// if err := chromedp.Reload().Do(ctx); err != nil {
-			// 	// 	currentRetry++
-			// 	// 	if currentRetry >= maxRetries {
-			// 	// 		return fmt.Errorf("页面刷新失败（已达最大重试次数）: %w", err)
-			// 	// 	}
-
-			// 	// 	logs.PrintlnInfo("刷新失败，等待重试....")
-			// 	// 	time.Sleep(2 * time.Second)
-			// 	// } else {
-			// 	// 	currentRetry = 0            // 重置计数器
-			// 	// 	time.Sleep(1 * time.Second) // 等待页面加载
-			// 	// }
-
-			// 	for {
-			// 		_ = chromedp.Click(".free_coupon_module.coupon_1x .button_no_click").Do(ctx)
-			// 		time.Sleep(1 * time.Nanosecond)
-			// 		logs.PrintlnInfo(".free_coupon_module.coupon_1x .button_no_click点击完成")
-			// 		logs.PrintlnInfo("点击完成")
-			// 	}
-
-			// case canClickVisible:
-			// 	logs.PrintlnInfo("发现可点击按钮，开始高频触发...")
-			// 	// 高频点击（带频率限制）
-
-			// 	// var count := 1
-			// 	for {
-			// 		logs.PrintlnInfo("发现可点按钮")
-
-			// 		_ = chromedp.Click(".free_coupon_module.coupon_1x").Do(ctx)
-			// 		time.Sleep(1 * time.Nanosecond)
-			// 		logs.PrintlnInfo("点击完成")
-			// 	}
-
-			// default:
-			// 	logs.PrintlnInfo("未检测到目标按钮，等待状态变化...")
-			// 	time.Sleep(1 * time.Second)
-			// }
+			logs.PrintlnInfo("点击完成")
 		}
-		// return nil
+
 	}
+
 }
 
-// 辅助函数：检测元素是否存在
-func elementExists(ctx context.Context, selector string) (bool, error) {
-	var exists bool
-	err := chromedp.EvaluateAsDevTools(
-		fmt.Sprintf(`document.querySelector('%s') !== null`, selector),
-		&exists,
-	).Do(ctx)
-	return exists, err
-}
+// // 执行实际的点击操作
+// func (jsk *jdSecKill) doClick(ctx context.Context) error {
+// 	// 使用短超时上下文
+// 	clickCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+// 	defer cancel()
 
-func (jsk *jdSecKill) FetchSecKillUrl() {
-	logs.PrintlnInfo("开始获取抢购连接.....")
-	for {
-		if jsk.SecKillUrl != "" {
-			break
-		}
-		jsk.SecKillUrl = jsk.GetSecKillUrl()
-		logs.PrintlnWarning("抢购链接获取失败.....正在重试")
-	}
-	jsk.SecKillUrl = "https:" + strings.TrimPrefix(jsk.SecKillUrl, "https:")
-	jsk.SecKillUrl = strings.ReplaceAll(jsk.SecKillUrl, "divide", "marathon")
-	jsk.SecKillUrl = strings.ReplaceAll(jsk.SecKillUrl, "user_routing", "captcha.html")
-	logs.PrintlnSuccess("抢购连接获取成功....", jsk.SecKillUrl)
-	return
-}
+// 	// 点击操作任务组
+// 	tasks := chromedp.Tasks{
+// 		chromedp.ActionFunc(func(ctx context.Context) error {
+// 			// 使用JavaScript检查元素可见性
+// 			var visible bool
+// 			err := chromedp.Evaluate(`
+//                 (function() {
+//                     const el = document.querySelector(`+"`"+jsk.dom+"`"+`);
 
-func (jsk *jdSecKill) ReqSubmitSecKillOrder(ctx context.Context) error {
-	if ctx == nil {
-		ctx = jsk.bCtx
-	}
-	//这里直接使用浏览器跳转 主要目的是获取cookie
-	skUrl := fmt.Sprintf("https://marathon.jd.com/seckill/seckill.action?=skuId=%s&num=%d&rid=%d", jsk.SkuId, jsk.SecKillNum, time.Now().Unix())
-	logs.PrintlnInfo("访问抢购订单结算页面......", skUrl)
-	_, _, _, _ = page.Navigate(skUrl).WithReferrer("https://item.jd.com/" + jsk.SkuId + ".html").Do(ctx)
+// 					const visible = el && el.offsetParent !== null
+// 					if (visible) {
+// 						el.scrollIntoView()
+// 					}
+//                     return visible;
+//                 })()
+//             `, &visible).Do(ctx)
 
-	logs.PrintlnInfo("获取抢购信息...............")
-	for {
-		err := jsk.GetSecKillInitInfo(ctx)
-		if err != nil {
-			logs.PrintErr("抢购失败：", err, "正在重试.......")
-		}
-		break
-	}
-	orderData := jsk.GetOrderReqData()
+// 			if err != nil || !visible {
 
-	if len(orderData) == 0 {
-		return errors.New("订单参数生成失败")
-	}
-	logs.PrintlnInfo("订单参数：", orderData.Encode())
-	logs.PrintlnInfo("提交抢购订单.............")
-	r, err := jsk.PostReq("https://marathon.jd.com/seckillnew/orderService/pc/submitOrder.action?skuId="+jsk.SkuId+"", orderData, skUrl, ctx)
-	if err != nil {
-		logs.PrintErr("抢购失败：", err)
-	}
-	orderId := r.Get("orderId").String()
-	if orderId != "" && orderId != "0" {
-		jsk.IsOk = true
-		jsk.IsOkChan <- struct{}{}
-		logs.PrintlnInfo("抢购成功，订单编号:", r.Get("orderId").String())
-	} else {
-		if r.IsObject() || r.IsArray() {
-			return errors.New("抢购失败：" + r.Raw)
-		}
-		return errors.New("抢购失败,再接再厉")
-	}
-	return nil
-}
+// 				return fmt.Errorf("button not visible")
+// 			}
+// 			return nil
+// 		}),
+// 		chromedp.Click(jsk.dom, chromedp.ByQuery, chromedp.NodeVisible),
+// 	}
 
-func (jsk *jdSecKill) GetOrderReqData() url.Values {
-	logs.PrintlnInfo("生成订单所需参数...")
-	defer func() {
-		if f := recover(); f != nil {
-			logs.PrintErr("订单参数错误：", f)
-		}
-	}()
+// 	// 执行点击
+// 	err := chromedp.Run(clickCtx, tasks)
+// 	if err != nil {
+// 		if !strings.Contains(err.Error(), "button not visible") {
+// 			logs.PrintlnInfo("点击异常:", err)
+// 		}
+// 		return err
+// 	}
 
-	addressList := jsk.SecKillInfo.Get("addressList").Array()
-	var defaultAddress gjson.Result
-	for _, dAddress := range addressList {
-		if dAddress.Get("defaultAddress").Bool() {
-			logs.PrintlnInfo("获取到默认收货地址")
-			defaultAddress = dAddress
-		}
-	}
-	if defaultAddress.Raw == "" {
-		logs.PrintlnInfo("没有获取到默认收货地址， 自动选择一个地址")
-		defaultAddress = addressList[0]
-	}
-	invoiceInfo := jsk.SecKillInfo.Get("invoiceInfo")
-	r := url.Values{
-		"skuId":              []string{jsk.SkuId},
-		"num":                []string{strconv.Itoa(jsk.SecKillNum)},
-		"addressId":          []string{defaultAddress.Get("id").String()},
-		"yuShou":             []string{"true"},
-		"isModifyAddress":    []string{"false"},
-		"name":               []string{defaultAddress.Get("name").String()},
-		"provinceId":         []string{defaultAddress.Get("provinceId").String()},
-		"cityId":             []string{defaultAddress.Get("cityId").String()},
-		"countyId":           []string{defaultAddress.Get("countyId").String()},
-		"townId":             []string{defaultAddress.Get("townId").String()},
-		"addressDetail":      []string{defaultAddress.Get("addressDetail").String()},
-		"mobile":             []string{defaultAddress.Get("mobile").String()},
-		"mobileKey":          []string{defaultAddress.Get("mobileKey").String()},
-		"email":              []string{defaultAddress.Get("email").String()},
-		"postCode":           []string{""},
-		"invoiceTitle":       []string{""},
-		"invoiceCompanyName": []string{""},
-		"invoiceContent":     []string{},
-		"invoiceTaxpayerNO":  []string{""},
-		"invoiceEmail":       []string{""},
-		"invoicePhone":       []string{invoiceInfo.Get("invoicePhone").String()},
-		"invoicePhoneKey":    []string{invoiceInfo.Get("invoicePhoneKey").String()},
-		"invoice":            []string{"true"},
-		"password":           []string{""},
-		"codTimeType":        []string{"3"},
-		"paymentType":        []string{"4"},
-		"areaCode":           []string{""},
-		"overseas":           []string{"0"},
-		"phone":              []string{""},
-		"eid":                []string{jsk.eid},
-		"fp":                 []string{jsk.fp},
-		"token":              []string{jsk.SecKillInfo.Get("token").String()},
-		"pru":                []string{""},
-	}
-
-	t := invoiceInfo.Get("invoiceTitle").String()
-	if t != "" {
-		r["invoiceTitle"] = []string{t}
-	} else {
-		r["invoiceTitle"] = []string{"-1"}
-	}
-
-	t = invoiceInfo.Get("invoiceContentType").String()
-	if t != "" {
-		r["invoiceContent"] = []string{t}
-	} else {
-		r["invoiceContent"] = []string{"1"}
-	}
-
-	return r
-}
-
-func (jsk *jdSecKill) GetSecKillInitInfo(ctx context.Context) error {
-	r, err := jsk.PostReq("https://marathon.jd.com/seckillnew/orderService/pc/init.action", url.Values{
-		"sku":             []string{jsk.SkuId},
-		"num":             []string{strconv.Itoa(jsk.SecKillNum)},
-		"isModifyAddress": []string{"false"},
-	}, fmt.Sprintf("https://marathon.jd.com/seckill/seckill.action?=skuId=100012043978&num=2&rid=%d6", time.Now().Unix()), ctx)
-	if err != nil {
-		return err
-	}
-	jsk.SecKillInfo = r
-	logs.PrintlnInfo("秒杀信息获取成功：", jsk.SecKillInfo.Raw)
-	return nil
-}
-
-func (jsk *jdSecKill) GetSecKillUrl() string {
-	req, _ := http.NewRequest("GET", "https://itemko.jd.com/itemShowBtn", nil)
-	req.Header.Add("User-Agent", jsk.userAgent)
-	req.Header.Add("Referer", "https://item.jd.com/"+jsk.SkuId+".html")
-	r, _ := jsk.GetReq("https://itemko.jd.com/itemShowBtn", map[string]string{
-		"callback": "jQuery" + strconv.FormatInt(global.GenerateRangeNum(1000000, 9999999), 10),
-		"skuId":    jsk.SkuId,
-		"from":     "pc",
-		"_":        strconv.FormatInt(time.Now().Unix()*1000, 10),
-	}, "https://item.jd.com/"+jsk.SkuId+".html", nil)
-	return r.Get("url").String()
-}
+// 	// 记录点击成功
+// 	atomic.AddInt64(&jsk.clickCount, 1)
+// 	return nil
+// }
