@@ -1,0 +1,4 @@
+请求 3 成功 [代理: ]: 状态=200, 响应={"subCodeMsg":"很抱歉，没抢到~","subCode":"A28","code":"0","msg":null}
+请求 1 成功 [代理: ]: 状态=200, 响应={"subCodeMsg":"很抱歉，没抢到~","subCode":"A28","code":"0","msg":null}
+请求 0 成功 [代理: ]: 状态=200, 响应={"subCodeMsg":"很抱歉，没抢到~","subCode":"A28","code":"0","msg":null}
+请求 2 成功 [代理: ]: 状态=200, 响应={"subCodeMsg":"很抱歉，没抢到~","subCode":"A28","code":"0","msg":null}
